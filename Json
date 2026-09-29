@@ -1,0 +1,10 @@
+{
+  "mode": "non_root",
+  "engine": "accessibility_service",
+  "sensitivity": 1.0,
+  "smooth": 0.6,
+  "head_offset": -80,
+  "fov_radius": 150,
+  "root_required": false,
+  "resolution_change": false
+}
