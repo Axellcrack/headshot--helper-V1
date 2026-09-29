@@ -1,0 +1,352 @@
+package com.headshothelper.app;
+
+import android.app.Activity;
+import android.content.Intent;
+import android.os.Bundle;
+import android.provider.Settings;
+import android.widget.*;
+import android.graphics.Color;
+import android.view.Gravity;
+
+public class MainActivity extends Activity {
+
+    public static float SENS = 1.0f;
+    public static float SMOOTH = 0.6f;
+    public static int HEAD_OFFSET = -80;
+    public static int FOV_RADIUS = 150;
+
+    @Override
+    protected void onCreate(Bundle b) {
+        super.onCreate(b);
+
+        ScrollView sc = new ScrollView(this);
+        LinearLayout root = new LinearLayout(this);
+        root.setOrientation(LinearLayout.VERTICAL);
+        root.setBackgroundColor(Color.parseColor("#0A0A0A"));
+        root.setPadding(50, 80, 50, 50);
+        sc.addView(root);
+
+        TextView title = new TextView(this);
+        title.setText("🎯 HEADSHOT HELPER");
+        title.setTextColor(Color.parseColor("#FF3B3B"));
+        title.setTextSize(22);
+        title.setGravity(Gravity.CENTER);
+        root.addView(title);
+
+        TextView sub = new TextView(this);
+        sub.setText("Non-Root • Accessibility + Overlay");
+        sub.setTextColor(Color.parseColor("#888"));
+        sub.setGravity(Gravity.CENTER);
+        sub.setPadding(0, 10, 0, 30);
+        root.addView(sub);
+
+        TextView sensL = new TextView(this);
+        sensL.setText("Sensitivity: 1.0x");
+        sensL.setTextColor(Color.WHITE);
+        root.addView(sensL);
+        SeekBar sensBar = new SeekBar(this);
+        sensBar.setMax(30);
+        sensBar.setProgress(10);
+        sensBar.setOnSeekBarChangeListener(new SL(() -> {
+            SENS = sensBar.getProgress() / 10f;
+            sensL.setText("Sensitivity: " + SENS + "x");
+        }));
+        root.addView(sensBar);
+
+        TextView smL = new TextView(this);
+        smL.setText("Smooth: 60%");
+        smL.setTextColor(Color.WHITE);
+        root.addView(smL);
+        SeekBar smoothBar = new SeekBar(this);
+        smoothBar.setMax(100);
+        smoothBar.setProgress(60);
+        smoothBar.setOnSeekBarChangeListener(new SL(() -> {
+            SMOOTH = smoothBar.getProgress() / 100f;
+            smL.setText("Smooth: " + smoothBar.getProgress() + "%");
+        }));
+        root.addView(smoothBar);
+
+        TextView offL = new TextView(this);
+        offL.setText("Head Offset: -80px");
+        offL.setTextColor(Color.WHITE);
+        root.addView(offL);
+        SeekBar offBar = new SeekBar(this);
+        offBar.setMax(200);
+        offBar.setProgress(80);
+        offBar.setOnSeekBarChangeListener(new SL(() -> {
+            HEAD_OFFSET = -offBar.getProgress();
+            offL.setText("Head Offset: " + HEAD_OFFSET + "px");
+        }));
+        root.addView(offBar);
+
+        TextView fovL = new TextView(this);
+        fovL.setText("FOV Radius: 150px");
+        fovL.setTextColor(Color.WHITE);
+        root.addView(fovL);
+        SeekBar fovBar = new SeekBar(this);
+        fovBar.setMax(300);
+        fovBar.setProgress(150);
+        fovBar.setOnSeekBarChangeListener(new SL(() -> {
+            FOV_RADIUS = fovBar.getProgress();
+            fovL.setText("FOV Radius: " + FOV_RADIUS + "px");
+        }));
+        root.addView(fovBar);
+
+        Button perm = btn("1. IZIN OVERLAY", "#444");
+        perm.setOnClickListener(v ->
+            startActivity(new Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION)));
+        root.addView(perm);
+
+        Button acc = btn("2. AKTIFKAN AKSESIBILITAS", "#0066CC");
+        acc.setOnClickListener(v ->
+            startActivity(new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)));
+        root.addView(acc);
+
+        Button start = btn("3. MULAI HEADSHOT HELPER", "#FF3B3B");
+        start.setOnClickListener(v -> {
+            startForegroundService(new Intent(this, OverlayService.class));
+            startService(new Intent(this, FloatingPanelService.class));
+            Toast.makeText(this, "AKTIF ✅", Toast.LENGTH_SHORT).show();
+            moveTaskToBack(true);
+        });
+        root.addView(start);
+
+        Button stop = btn("MATIKAN", "#222");
+        stop.setOnClickListener(v -> {
+            stopService(new Intent(this, OverlayService.class));
+            stopService(new Intent(this, FloatingPanelService.class));
+        });
+        root.addView(stop);
+
+        TextView info = new TextView(this);
+        info.setText("\nCara pakai:\n" +
+            "1. IZIN OVERLAY → allow\n" +
+            "2. AKSESIBILITAS → cari 'Headshot Helper' → ON\n" +
+            "3. MULAI → buka Free Fire\n" +
+            "4. Crosshair muncul otomatis\n" +
+            "5. Drag aim → gerakan halus");
+        info.setTextColor(Color.parseColor("#888"));
+        info.setTextSize(13);
+        root.addView(info);
+
+        setContentView(sc);
+    }
+
+    private Button btn(String t, String c) {
+        Button b = new Button(this);
+        b.setText(t);
+        b.setBackgroundColor(Color.parseColor(c));
+        b.setTextColor(Color.WHITE);
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
+        lp.setMargins(0, 15, 0, 0);
+        b.setLayoutParams(lp);
+        return b;
+    }
+
+    static class SL implements SeekBar.OnSeekBarChangeListener {
+        private final Runnable r;
+        SL(Runnable r) { this.r = r; }
+        public void onProgressChanged(SeekBar s, int p, boolean f) { r.run(); }
+        public void onStartTrackingTouch(SeekBar s) {}
+        public void onStopTrackingTouch(SeekBar s) {}
+    }
+}package com.headshothelper.app;
+
+import android.accessibilityservice.AccessibilityService;
+import android.accessibilityservice.GestureDescription;
+import android.graphics.Path;
+import android.os.Build;
+import android.view.accessibility.AccessibilityEvent;
+
+public class TouchAccessibilityService extends AccessibilityService {
+
+    private static TouchAccessibilityService instance;
+
+    public static TouchAccessibilityService getInstance() { return instance; }
+
+    @Override
+    protected void onServiceConnected() {
+        super.onServiceConnected();
+        instance = this;
+    }
+
+    @Override public void onAccessibilityEvent(AccessibilityEvent e) {}
+    @Override public void onInterrupt() {}
+
+    @Override
+    public void onDestroy() {
+        instance = null;
+        super.onDestroy();
+    }
+
+    public void smoothDrag(float startX, float startY,
+                           float dx, float dy,
+                           float smooth, int durationMs) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.N) return;
+
+        int steps = 8 + (int)(smooth * 20);
+        Path path = new Path();
+        path.moveTo(startX, startY);
+
+        for (int i = 1; i <= steps; i++) {
+            float t = (float) i / steps;
+            float ease = 1.0f - (float) Math.pow(1.0f - t, 3.0f);
+            path.lineTo(startX + dx * ease, startY + dy * ease);
+        }
+
+        GestureDescription.StrokeDescription stroke =
+            new GestureDescription.StrokeDescription(path, 0, durationMs);
+        GestureDescription.Builder b = new GestureDescription.Builder();
+        b.addStroke(stroke);
+        dispatchGesture(b.build(), null, null);
+    }
+
+    public void tap(float x, float y) {
+        Path p = new Path();
+        p.moveTo(x, y);
+        GestureDescription.StrokeDescription s =
+            new GestureDescription.StrokeDescription(p, 0, 30);
+        dispatchGesture(new GestureDescription.Builder().addStroke(s).build(),
+            null, null);
+    }
+}package com.headshothelper.app;
+
+import android.app.*;
+import android.content.Intent;
+import android.graphics.*;
+import android.os.Build;
+import android.os.IBinder;
+import android.view.*;
+
+public class OverlayService extends Service {
+
+    private View overlay;
+    private WindowManager wm;
+    private float lastX, lastY;
+    private boolean dragging = false;
+
+    @Override public IBinder onBind(Intent i) { return null; }
+
+    @Override
+    public int onStartCommand(Intent i, int f, int s) {
+        if (Build.VERSION.SDK_INT >= 26) {
+            NotificationChannel ch = new NotificationChannel(
+                "hs", "Headshot Helper",
+                NotificationManager.IMPORTANCE_LOW);
+            getSystemService(NotificationManager.class).createNotificationChannel(ch);
+            Notification n = new Notification.Builder(this, "hs")
+                .setContentTitle("Headshot Helper Aktif")
+                .setContentText("Non-root smooth touch ✅")
+                .setSmallIcon(android.R.drawable.ic_menu_my_calendar)
+                .build();
+            startForeground(1, n);
+        }
+        return START_STICKY;
+    }
+
+    @Override
+    public void onCreate() {
+        super.onCreate();
+        wm = (WindowManager) getSystemService(WINDOW_SERVICE);
+
+        overlay = new View(this) {
+            private Paint p = new Paint();
+
+            @Override
+            protected void onDraw(Canvas c) {
+                super.onDraw(c);
+                int cx = getWidth() / 2;
+                int cy = getHeight() / 2;
+
+                p.setStyle(Paint.Style.STROKE);
+                p.setColor(Color.parseColor("#00FFAA55"));
+                p.setStrokeWidth(2);
+                c.drawCircle(cx, cy, MainActivity.FOV_RADIUS, p);
+
+                p.setColor(Color.parseColor("#FF3B3B"));
+                p.setStrokeWidth(3);
+                int gap = 8, len = 30;
+                c.drawLine(cx, cy - gap - len, cx, cy - gap, p);
+                c.drawLine(cx, cy + gap, cx, cy + gap + len, p);
+                c.drawLine(cx - gap - len, cy, cx - gap, cy, p);
+                c.drawLine(cx + gap, cy, cx + gap + len, cy, p);
+                c.drawCircle(cx, cy, 3, p);
+
+                p.setColor(Color.parseColor("#FFAA00"));
+                p.setStyle(Paint.Style.STROKE);
+                int hy = cy + MainActivity.HEAD_OFFSET;
+                c.drawCircle(cx, hy, 25, p);
+                p.setStyle(Paint.Style.FILL);
+                p.setTextSize(24);
+                c.drawText("HEAD", cx - 32, hy + 8, p);
+
+                p.setColor(Color.parseColor("#00FFAA44"));
+                p.setStrokeWidth(1);
+                c.drawLine(cx, 0, cx, getHeight(), p);
+                c.drawLine(0, cy, getWidth(), cy, p);
+            }
+        };
+
+        overlay.setOnTouchListener((v, e) -> {
+            switch (e.getActionMasked()) {
+                case MotionEvent.ACTION_DOWN:
+                    lastX = e.getRawX();
+                    lastY = e.getRawY();
+                    dragging = true;
+                    return true;
+
+                case MotionEvent.ACTION_MOVE:
+                    if (!dragging) return false;
+                    float rx = e.getRawX();
+                    float ry = e.getRawY();
+                    float dx = (rx - lastX) * MainActivity.SENS;
+                    float dy = (ry - lastY) * MainActivity.SENS;
+
+                    TouchAccessibilityService svc =
+                        TouchAccessibilityService.getInstance();
+                    if (svc != null) {
+                        svc.smoothDrag(rx, ry, dx, dy,
+                            MainActivity.SMOOTH, 16);
+                    }
+
+                    lastX = rx;
+                    lastY = ry;
+                    return true;
+
+                case MotionEvent.ACTION_UP:
+                case MotionEvent.ACTION_CANCEL:
+                    dragging = false;
+                    return true;
+            }
+            return false;
+        });
+
+        WindowManager.LayoutParams lp = new WindowManager.LayoutParams(
+            -1, -1,
+            WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
+              | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN
+              | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS
+              | WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL,
+            PixelFormat.TRANSLUCENT);
+        wm.addView(overlay, lp);
+    }
+
+    @Override
+    public void onDestroy() {
+        if (overlay != null) wm.removeView(overlay);
+        super.onDestroy();
+    }
+}package com.headshothelper.app;
+
+import android.content.*;
+import android.os.Bundle;
+
+public class BootReceiver extends BroadcastReceiver {
+    @Override
+    public void onReceive(Context c, Intent i) {
+        if (Intent.ACTION_BOOT_COMPLETED.equals(i.getAction())) {
+            c.startService(new Intent(c, OverlayService.class));
+        }
+    }
+}
