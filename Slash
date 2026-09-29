@@ -1,0 +1,15 @@
+build.gradle
+settings.gradle
+gradle.properties
+gradlew
+.github/workflows/build.yml
+app/build.gradle
+app/src/main/AndroidManifest.xml
+app/src/main/res/values/strings.xml
+app/src/main/res/xml/accessibility_service_config.xml
+app/src/main/assets/hs_config.json
+app/src/main/java/com/headshothelper/app/MainActivity.java
+app/src/main/java/com/headshothelper/app/TouchAccessibilityService.java
+app/src/main/java/com/headshothelper/app/OverlayService.java
+app/src/main/java/com/headshothelper/app/FloatingPanelService.java
+app/src/main/java/com/headshothelper/app/BootReceiver.java
